@@ -1,0 +1,123 @@
+<?php
+/**
+ * Implements hook_menu().
+ */
+function site_alert_message_menu() {
+  $items = array();
+  
+  $items['admin/config/system/alert-message'] = array(
+    'title' => 'Alert Message',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('site_alert_message_admin_form'),
+    'access arguments' => array('administer site alert message'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function site_alert_message_permission() {
+  return array(
+    'administer site alert message' => array(
+      'title' => t('Administer Site Alert Message'),
+      'description' => t('Make changes to the alert message.'),
+    ),
+  );
+}
+
+/**
+ * Admin form.
+ */
+function site_alert_message_admin_form($form, &$form_state) {
+  $defaults = variable_get('site_alert_message_message', array(
+    'format' => 'filtered_html',
+    'value' => '',
+  ));
+  
+  $form['site_alert_message_message'] = array(
+    '#format' => $defaults['format'],
+    '#type' => 'text_format',
+    '#default_value' => $defaults['value'],
+    '#title' => t('Alert Message'),
+  );
+  
+  $form['site_alert_message_generate_cookie'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Generate a new cookie name.'),
+    '#description' => t('When checked, saving this form will change the cookie name')
+      . t(' used to only show the message once. All users will see the message again.')
+  );
+  
+  $form['#submit'][] = 'site_alert_message_generate_cookie';
+  
+  return system_settings_form($form);
+}
+
+/**
+ * Form submit for resetting the cookie.
+ * @param $form
+ * @param $form_state
+ */
+function site_alert_message_generate_cookie($form, &$form_state) {
+  $cookie_name = variable_get('site_alert_message_cookie_name', FALSE);
+  if(empty($form_state['values']['site_alert_message_generate_cookie'])
+     && !empty($cookie_name)) {
+    return;
+  }
+  $cookie_name = base64_encode(openssl_random_pseudo_bytes(30));
+  variable_set('site_alert_message_cookie_name', $cookie_name);
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function site_alert_message_block_info() {
+  $blocks = array();
+  
+  $blocks['site_alert_message_block'] = array(
+    'info' => t('Site Alert: Message Block'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+  
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function site_alert_message_block_view($delta = '') {
+  $block = array(
+    'subject' => '',
+    'content' => '',
+  );
+  switch ($delta) {
+    case 'site_alert_message_block':
+      $defaults = variable_get('site_alert_message_message', array(
+        'format' => 'filtered_html',
+        'value' => '',
+      ));
+      if (!empty($defaults['value'])) {
+        drupal_add_library('system', 'jquery.cookie');
+        drupal_add_js(drupal_get_path('module', 'site_alert_message') . '/js/alert.js');
+        drupal_add_js(array(
+          'site_alert_message' => array(
+            'cookie' => variable_get('site_alert_message_cookie_name', FALSE),
+          ),
+        ), array('type' => 'setting'));
+        $block['subject'] = '';
+        $block['content'] = array(
+          '#theme' => 'zurb_foundation_reveal',
+          '#text' => '',
+          '#link_classes_array' => array(
+            'site-alert-message-reveal-trigger',
+          ),
+          '#reveal' => $defaults['value'],
+        );
+      }
+      break;
+  }
+  return $block;
+}
